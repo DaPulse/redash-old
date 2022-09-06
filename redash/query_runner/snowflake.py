@@ -128,6 +128,9 @@ class Snowflake(BaseQueryRunner):
         connection = self._get_connection()
         cursor = connection.cursor()
 
+        if ' events ' in query.lower() and not ('created_at' in query.lower() or 'ingestion_time' in query.lower()):
+            return {}, 'querying events table should always be with time constraint (by created_at for FINAL.events & ingestion_time for RAW.events)'
+
         try:
             cursor.execute("USE WAREHOUSE {}".format(self.configuration["warehouse"]))
             cursor.execute("USE {}".format(self.configuration["database"]))
