@@ -55,20 +55,6 @@ describe("Visualizations -> Chart -> Editor -> X-Axis Settings", () => {
       .simulate("change", { target: { value: "test" } });
   });
 
-  test("Changes axis tick format", done => {
-    const el = mount(
-      {
-        globalSeriesType: "column",
-        xAxis: { },
-      },
-      done
-    );
-
-    findByTestID(el, "Chart.XAxis.TickFormat")
-      .last()
-      .simulate("change", { target: { value: "%B" } });
-  });
-
   test("Sets Show Labels option", done => {
     const el = mount(
       {

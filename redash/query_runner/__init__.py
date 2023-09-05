@@ -1,20 +1,22 @@
 import logging
-from collections import defaultdict
+
 from contextlib import ExitStack
-from functools import wraps
-
-import sqlparse
 from dateutil import parser
-from rq.timeouts import JobTimeoutException
-from sshtunnel import open_tunnel
+from functools import wraps
+import socket
+import ipaddress
+from urllib.parse import urlparse
 
+from six import text_type
+from sshtunnel import open_tunnel
 from redash import settings, utils
 from redash.utils import json_loads
-from redash.utils.requests_session import (
-    UnacceptableAddressException,
-    requests_or_advocate,
-    requests_session,
-)
+from rq.timeouts import JobTimeoutException
+
+from redash.utils.requests_session import requests_or_advocate, requests_session, UnacceptableAddressException
+
+
+import sqlparse
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +47,9 @@ TYPE_STRING = "string"
 TYPE_DATETIME = "datetime"
 TYPE_DATE = "date"
 
-SUPPORTED_COLUMN_TYPES = set([TYPE_INTEGER, TYPE_FLOAT, TYPE_BOOLEAN, TYPE_STRING, TYPE_DATETIME, TYPE_DATE])
-
+SUPPORTED_COLUMN_TYPES = set(
+    [TYPE_INTEGER, TYPE_FLOAT, TYPE_BOOLEAN, TYPE_STRING, TYPE_DATETIME, TYPE_DATE]
+)
 
 def split_sql_statements(query):
     def strip_trailing_comments(stmt):
@@ -54,7 +57,7 @@ def split_sql_statements(query):
         while idx >= 0:
             tok = stmt.tokens[idx]
             if tok.is_whitespace or sqlparse.utils.imt(tok, i=sqlparse.sql.Comment, t=sqlparse.tokens.Comment):
-                stmt.tokens[idx] = sqlparse.sql.Token(sqlparse.tokens.Whitespace, " ")
+                stmt.tokens[idx] = sqlparse.sql.Token(sqlparse.tokens.Whitespace, ' ')
             else:
                 break
             idx -= 1
@@ -67,27 +70,27 @@ def split_sql_statements(query):
             # we expect that trailing comments already are removed
             if not tok.is_whitespace:
                 if sqlparse.utils.imt(tok, t=sqlparse.tokens.Punctuation) and tok.value == ";":
-                    stmt.tokens[idx] = sqlparse.sql.Token(sqlparse.tokens.Whitespace, " ")
+                    stmt.tokens[idx] = sqlparse.sql.Token(sqlparse.tokens.Whitespace, ' ')
                 break
             idx -= 1
         return stmt
 
     def is_empty_statement(stmt):
+        strip_comments = sqlparse.filters.StripCommentsFilter()
+
         # copy statement object. `copy.deepcopy` fails to do this, so just re-parse it
         st = sqlparse.engine.FilterStack()
-        st.stmtprocess.append(sqlparse.filters.StripCommentsFilter())
-        stmt = next(st.run(str(stmt)), None)
-        if stmt is None:
-            return True
+        stmt = next(st.run(sqlparse.text_type(stmt)))
 
-        return str(stmt).strip() == ""
+        sql = sqlparse.text_type(strip_comments.process(stmt))
+        return sql.strip() == ""
 
     stack = sqlparse.engine.FilterStack()
 
     result = [stmt for stmt in stack.run(query)]
     result = [strip_trailing_comments(stmt) for stmt in result]
     result = [strip_trailing_semicolon(stmt) for stmt in result]
-    result = [str(stmt).strip() for stmt in result if not is_empty_statement(stmt)]
+    result = [sqlparse.text_type(stmt).strip() for stmt in result if not is_empty_statement(stmt)]
 
     if len(result) > 0:
         return result
@@ -98,13 +101,11 @@ def split_sql_statements(query):
 def combine_sql_statements(queries):
     return ";\n".join(queries)
 
-
 def find_last_keyword_idx(parsed_query):
     for i in reversed(range(len(parsed_query.tokens))):
         if parsed_query.tokens[i].ttype in sqlparse.tokens.Keyword:
             return i
     return -1
-
 
 class InterruptException(Exception):
     pass
@@ -119,7 +120,7 @@ class BaseQueryRunner(object):
     should_annotate_query = True
     noop_query = None
     limit_query = " LIMIT 1000"
-    limit_keywords = ["LIMIT", "OFFSET"]
+    limit_keywords = [ "LIMIT", "OFFSET"]
 
     def __init__(self, configuration):
         self.syntax = "sql"
@@ -213,30 +214,25 @@ class BaseQueryRunner(object):
         raise NotImplementedError()
 
     def fetch_columns(self, columns):
-        column_names = set()
-        duplicates_counters = defaultdict(int)
+        column_names = []
+        duplicates_counter = 1
         new_columns = []
 
         for col in columns:
             column_name = col[0]
-            while column_name in column_names:
-                duplicates_counters[col[0]] += 1
-                column_name = "{}{}".format(col[0], duplicates_counters[col[0]])
+            if column_name in column_names:
+                column_name = "{}{}".format(column_name, duplicates_counter)
+                duplicates_counter += 1
 
-            column_names.add(column_name)
-            new_columns.append({"name": column_name, "friendly_name": column_name, "type": col[1]})
+            column_names.append(column_name)
+            new_columns.append(
+                {"name": column_name, "friendly_name": column_name, "type": col[1]}
+            )
 
         return new_columns
 
     def get_schema(self, get_stats=False):
         raise NotSupported()
-
-    def _handle_run_query_error(self, error):
-        if error is None:
-            return
-
-        logger.error(error)
-        raise Exception(f"Error during query execution. Reason: {error}")
 
     def _run_query_internal(self, query):
         results, error = self.run_query(query, None)
@@ -279,7 +275,7 @@ class BaseSQLQueryRunner(BaseQueryRunner):
 
     def _get_tables_stats(self, tables_dict):
         for t in tables_dict.keys():
-            if isinstance(tables_dict[t], dict):
+            if type(tables_dict[t]) == dict:
                 res = self._run_query_internal("select count(*) as cnt from %s" % t)
                 tables_dict[t]["size"] = res[0]["cnt"]
 
@@ -303,19 +299,22 @@ class BaseSQLQueryRunner(BaseQueryRunner):
         limit_tokens = sqlparse.parse(self.limit_query)[0].tokens
         length = len(parsed_query.tokens)
         if parsed_query.tokens[length - 1].ttype == sqlparse.tokens.Punctuation:
-            parsed_query.tokens[length - 1 : length - 1] = limit_tokens
+            parsed_query.tokens[length - 1:length - 1] = limit_tokens
         else:
             parsed_query.tokens += limit_tokens
         return str(parsed_query)
 
+
     def apply_auto_limit(self, query_text, should_apply_auto_limit):
-        queries = split_sql_statements(query_text)
         if should_apply_auto_limit:
+            queries = split_sql_statements(query_text)
             # we only check for last one in the list because it is the one that we show result
             last_query = queries[-1]
             if self.query_is_select_no_limit(last_query):
                 queries[-1] = self.add_limit_to_query(last_query)
-        return combine_sql_statements(queries)
+            return combine_sql_statements(queries)
+        else:
+            return query_text
 
 
 class BaseHTTPQueryRunner(BaseQueryRunner):
@@ -361,6 +360,7 @@ class BaseHTTPQueryRunner(BaseQueryRunner):
             return None
 
     def get_response(self, url, auth=None, http_method="get", **kwargs):
+
         # Get authentication values if not given
         if auth is None:
             auth = self.get_auth()
@@ -382,8 +382,9 @@ class BaseHTTPQueryRunner(BaseQueryRunner):
 
         except requests_or_advocate.HTTPError as exc:
             logger.exception(exc)
-            error = "Failed to execute query. "
-            f"Return Code: {response.status_code} Reason: {response.text}"
+            error = "Failed to execute query. " "Return Code: {} Reason: {}".format(
+                response.status_code, response.text
+            )
         except UnacceptableAddressException as exc:
             logger.exception(exc)
             error = "Can't query private addresses."
@@ -483,7 +484,9 @@ def with_ssh_tunnel(query_runner, details):
             try:
                 remote_host, remote_port = query_runner.host, query_runner.port
             except NotImplementedError:
-                raise NotImplementedError("SSH tunneling is not implemented for this query runner yet.")
+                raise NotImplementedError(
+                    "SSH tunneling is not implemented for this query runner yet."
+                )
 
             stack = ExitStack()
             try:
@@ -493,7 +496,11 @@ def with_ssh_tunnel(query_runner, details):
                     "ssh_username": details["ssh_username"],
                     **settings.dynamic_settings.ssh_tunnel_auth(),
                 }
-                server = stack.enter_context(open_tunnel(bastion_address, remote_bind_address=remote_address, **auth))
+                server = stack.enter_context(
+                    open_tunnel(
+                        bastion_address, remote_bind_address=remote_address, **auth
+                    )
+                )
             except Exception as error:
                 raise type(error)("SSH tunnel: {}".format(str(error)))
 

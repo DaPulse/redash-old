@@ -1,6 +1,6 @@
-.PHONY: compose_build up test_db create_database clean down tests lint backend-unit-tests frontend-unit-tests test build watch start redis-cli bash
+.PHONY: compose_build up test_db create_database clean down bundle tests lint backend-unit-tests frontend-unit-tests test build watch start redis-cli bash
 
-compose_build: .env
+compose_build:
 	COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 docker-compose build
 
 up:
@@ -13,7 +13,7 @@ test_db:
 	done
 	docker-compose exec postgres sh -c 'psql -U postgres -c "drop database if exists tests;" && psql -U postgres -c "create database tests;"'
 
-create_database: .env
+create_database:
 	docker-compose run server create_db
 
 clean:
@@ -22,13 +22,8 @@ clean:
 down:
 	docker-compose down
 
-.env:
-	printf "REDASH_COOKIE_SECRET=`pwgen -1s 32`\nREDASH_SECRET_KEY=`pwgen -1s 32`\n" >> .env
-
-env: .env
-
-format:
-	pre-commit run --all-files
+bundle:
+	docker-compose run server bin/bundle-extensions
 
 tests:
 	docker-compose run server tests
@@ -39,19 +34,20 @@ lint:
 backend-unit-tests: up test_db
 	docker-compose run --rm --name tests server tests
 
-frontend-unit-tests:
+frontend-unit-tests: bundle
 	CYPRESS_INSTALL_BINARY=0 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=1 yarn --frozen-lockfile
+	yarn bundle
 	yarn test
 
 test: lint backend-unit-tests frontend-unit-tests
 
-build: 
+build: bundle
 	yarn build
 
-watch: 
+watch: bundle
 	yarn watch
 
-start: 
+start: bundle
 	yarn start
 
 redis-cli:

@@ -1,7 +1,9 @@
 from funcy import pairwise
+from tests import BaseTestCase
+from mock import patch
 
 from redash.models import DataSource
-from tests import BaseTestCase
+from redash.query_runner.pg import PostgreSQL
 
 
 class TestDataSourceGetSchema(BaseTestCase):
@@ -69,7 +71,9 @@ class TestDataSourceResourceGet(BaseTestCase):
         data_source = self.factory.create_data_source(group=group, view_only=True)
         user = self.factory.create_user(group_ids=[group.id])
 
-        rv = self.make_request("get", "/api/data_sources/{}".format(data_source.id), user=user)
+        rv = self.make_request(
+            "get", "/api/data_sources/{}".format(data_source.id), user=user
+        )
         self.assertEqual(rv.status_code, 200)
         self.assertEqual(rv.json, {"view_only": True})
 
@@ -128,7 +132,9 @@ class TestDataSourceResourceDelete(BaseTestCase):
         data_source = self.factory.create_data_source()
         admin = self.factory.create_admin()
 
-        rv = self.make_request("delete", "/api/data_sources/{}".format(data_source.id), user=admin)
+        rv = self.make_request(
+            "delete", "/api/data_sources/{}".format(data_source.id), user=admin
+        )
 
         self.assertEqual(204, rv.status_code)
         self.assertIsNone(DataSource.query.get(data_source.id))
@@ -140,7 +146,9 @@ class TestDataSourceListResourcePost(BaseTestCase):
         rv = self.make_request("post", "/api/data_sources", user=admin)
         self.assertEqual(rv.status_code, 400)
 
-        rv = self.make_request("post", "/api/data_sources", data={"name": "DS 1"}, user=admin)
+        rv = self.make_request(
+            "post", "/api/data_sources", data={"name": "DS 1"}, user=admin
+        )
 
         self.assertEqual(rv.status_code, 400)
 
@@ -190,17 +198,25 @@ class TestDataSourcePausePost(BaseTestCase):
         )
         self.assertEqual(rv.status_code, 200)
         self.assertEqual(DataSource.query.get(self.factory.data_source.id).paused, True)
-        self.assertEqual(DataSource.query.get(self.factory.data_source.id).pause_reason, "testing")
+        self.assertEqual(
+            DataSource.query.get(self.factory.data_source.id).pause_reason, "testing"
+        )
 
         rv = self.make_request(
             "post",
-            "/api/data_sources/{}/pause?reason=test".format(self.factory.data_source.id),
+            "/api/data_sources/{}/pause?reason=test".format(
+                self.factory.data_source.id
+            ),
             user=admin,
         )
-        self.assertEqual(DataSource.query.get(self.factory.data_source.id).pause_reason, "test")
+        self.assertEqual(
+            DataSource.query.get(self.factory.data_source.id).pause_reason, "test"
+        )
 
     def test_requires_admin(self):
-        rv = self.make_request("post", "/api/data_sources/{}/pause".format(self.factory.data_source.id))
+        rv = self.make_request(
+            "post", "/api/data_sources/{}/pause".format(self.factory.data_source.id)
+        )
         self.assertEqual(rv.status_code, 403)
 
 
@@ -214,8 +230,12 @@ class TestDataSourcePauseDelete(BaseTestCase):
             user=admin,
         )
         self.assertEqual(rv.status_code, 200)
-        self.assertEqual(DataSource.query.get(self.factory.data_source.id).paused, False)
+        self.assertEqual(
+            DataSource.query.get(self.factory.data_source.id).paused, False
+        )
 
     def test_requires_admin(self):
-        rv = self.make_request("delete", "/api/data_sources/{}/pause".format(self.factory.data_source.id))
+        rv = self.make_request(
+            "delete", "/api/data_sources/{}/pause".format(self.factory.data_source.id)
+        )
         self.assertEqual(rv.status_code, 403)

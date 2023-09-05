@@ -10,7 +10,6 @@ module.exports = {
     path: path.resolve(__dirname, "dist"),
     filename: "redash-visualizations.js",
     libraryTarget: "umd",
-    assetModuleFilename: 'images/[name][ext]'
   },
   resolve: {
     symlinks: false,
@@ -29,7 +28,15 @@ module.exports = {
       },
       {
         test: /\.(png|jpe?g|gif|svg)(\?.*)?$/,
-        type: 'asset/resource',
+        use: [
+          {
+            loader: "file-loader",
+            options: {
+              outputPath: "images/",
+              name: "[name].[ext]",
+            },
+          },
+        ],
       },
       {
         test: /\.less$/,
@@ -39,10 +46,8 @@ module.exports = {
           {
             loader: "less-loader",
             options: {
-              lessOptions: {
-                plugins: [new LessPluginAutoPrefix({ browsers: ["last 3 versions"] })],
-                javascriptEnabled: true,
-	      },
+              plugins: [new LessPluginAutoPrefix({ browsers: ["last 3 versions"] })],
+              javascriptEnabled: true,
             },
           },
         ],

@@ -2,16 +2,15 @@ import logging
 import time
 
 from rq.timeouts import JobTimeoutException
-
 from redash import models, redis_connection, settings, statsd_client
 from redash.models.parameterized_query import (
     InvalidParameterError,
     QueryDetachedFromDataSourceError,
 )
-from redash.monitor import rq_job_ids
 from redash.tasks.failure_report import track_failure
 from redash.utils import json_dumps, sentry
-from redash.worker import get_job_logger, job
+from redash.worker import job, get_job_logger
+from redash.monitor import rq_job_ids
 
 from .execution import enqueue_query
 
@@ -57,14 +56,16 @@ def _apply_default_parameters(query):
         try:
             return query.parameterized.apply(parameters).query
         except InvalidParameterError as e:
-            error = f"Skipping refresh of {query.id} because of invalid parameters: {str(e)}"
+            error = u"Skipping refresh of {} because of invalid parameters: {}".format(
+                query.id, str(e)
+            )
             track_failure(query, error)
             raise
         except QueryDetachedFromDataSourceError as e:
             error = (
-                f"Skipping refresh of {query.id} because a related dropdown "
-                f"query ({e.query_id}) is unattached to any datasource."
-            )
+                "Skipping refresh of {} because a related dropdown "
+                "query ({}) is unattached to any datasource."
+            ).format(query.id, e.query_id)
             track_failure(query, error)
             raise
     else:
@@ -77,11 +78,12 @@ class RefreshQueriesError(Exception):
 
 def _apply_auto_limit(query_text, query):
     should_apply_auto_limit = query.options.get("apply_auto_limit", False)
-    return query.data_source.query_runner.apply_auto_limit(query_text, should_apply_auto_limit)
+    return query.data_source.query_runner.apply_auto_limit(
+        query_text, should_apply_auto_limit
+    )
 
 
 def refresh_queries():
-    started_at = time.time()
     logger.info("Refreshing queries...")
     enqueued = []
     for query in models.Query.outdated_queries():
@@ -96,7 +98,7 @@ def refresh_queries():
                 query.data_source,
                 query.user_id,
                 scheduled_query=query,
-                metadata={"query_id": query.id, "Username": query.user.get_actual_user()},
+                metadata={"query_id": query.id, "Username": "Scheduled"},
             )
             enqueued.append(query)
         except Exception as e:
@@ -106,13 +108,12 @@ def refresh_queries():
             sentry.capture_exception(error)
 
     status = {
-        "started_at": started_at,
         "outdated_queries_count": len(enqueued),
         "last_refresh_at": time.time(),
         "query_ids": json_dumps([q.id for q in enqueued]),
     }
 
-    redis_connection.hset("redash:status", mapping=status)
+    redis_connection.hmset("redash:status", status)
     logger.info("Done refreshing queries: %s" % status)
 
 
@@ -131,9 +132,13 @@ def cleanup_query_results():
         settings.QUERY_RESULTS_CLEANUP_MAX_AGE,
     )
 
-    unused_query_results = models.QueryResult.unused(settings.QUERY_RESULTS_CLEANUP_MAX_AGE)
+    unused_query_results = models.QueryResult.unused(
+        settings.QUERY_RESULTS_CLEANUP_MAX_AGE
+    )
     deleted_count = models.QueryResult.query.filter(
-        models.QueryResult.id.in_(unused_query_results.limit(settings.QUERY_RESULTS_CLEANUP_COUNT).subquery())
+        models.QueryResult.id.in_(
+            unused_query_results.limit(settings.QUERY_RESULTS_CLEANUP_COUNT).subquery()
+        )
     ).delete(synchronize_session=False)
     models.db.session.commit()
     logger.info("Deleted %d unused query results.", deleted_count)
@@ -160,28 +165,30 @@ def remove_ghost_locks():
 @job("schemas")
 def refresh_schema(data_source_id):
     ds = models.DataSource.get_by_id(data_source_id)
-    logger.info("task=refresh_schema state=start ds_id=%s", ds.id)
+    logger.info(u"task=refresh_schema state=start ds_id=%s", ds.id)
     start_time = time.time()
     try:
         ds.get_schema(refresh=True)
         logger.info(
-            "task=refresh_schema state=finished ds_id=%s runtime=%.2f",
+            u"task=refresh_schema state=finished ds_id=%s runtime=%.2f",
             ds.id,
             time.time() - start_time,
         )
         statsd_client.incr("refresh_schema.success")
     except JobTimeoutException:
         logger.info(
-            "task=refresh_schema state=timeout ds_id=%s runtime=%.2f",
+            u"task=refresh_schema state=timeout ds_id=%s runtime=%.2f",
             ds.id,
             time.time() - start_time,
         )
         statsd_client.incr("refresh_schema.timeout")
     except Exception:
-        logger.warning("Failed refreshing schema for the data source: %s", ds.name, exc_info=1)
+        logger.warning(
+            u"Failed refreshing schema for the data source: %s", ds.name, exc_info=1
+        )
         statsd_client.incr("refresh_schema.error")
         logger.info(
-            "task=refresh_schema state=failed ds_id=%s runtime=%.2f",
+            u"task=refresh_schema state=failed ds_id=%s runtime=%.2f",
             ds.id,
             time.time() - start_time,
         )
@@ -191,26 +198,34 @@ def refresh_schemas():
     """
     Refreshes the data sources schemas.
     """
-    blacklist = [int(ds_id) for ds_id in redis_connection.smembers("data_sources:schema:blacklist") if ds_id]
+    blacklist = [
+        int(ds_id)
+        for ds_id in redis_connection.smembers("data_sources:schema:blacklist")
+        if ds_id
+    ]
     global_start_time = time.time()
 
-    logger.info("task=refresh_schemas state=start")
+    logger.info(u"task=refresh_schemas state=start")
 
     for ds in models.DataSource.query:
         if ds.paused:
             logger.info(
-                "task=refresh_schema state=skip ds_id=%s reason=paused(%s)",
+                u"task=refresh_schema state=skip ds_id=%s reason=paused(%s)",
                 ds.id,
                 ds.pause_reason,
             )
         elif ds.id in blacklist:
-            logger.info("task=refresh_schema state=skip ds_id=%s reason=blacklist", ds.id)
+            logger.info(
+                u"task=refresh_schema state=skip ds_id=%s reason=blacklist", ds.id
+            )
         elif ds.org.is_disabled:
-            logger.info("task=refresh_schema state=skip ds_id=%s reason=org_disabled", ds.id)
+            logger.info(
+                u"task=refresh_schema state=skip ds_id=%s reason=org_disabled", ds.id
+            )
         else:
             refresh_schema.delay(ds.id)
 
     logger.info(
-        "task=refresh_schemas state=finish total_runtime=%.2f",
+        u"task=refresh_schemas state=finish total_runtime=%.2f",
         time.time() - global_start_time,
     )

@@ -1,22 +1,18 @@
+from redash.query_runner import BaseQueryRunner, register
 from redash.query_runner import (
-    TYPE_BOOLEAN,
+    TYPE_STRING,
     TYPE_DATE,
     TYPE_DATETIME,
-    TYPE_FLOAT,
     TYPE_INTEGER,
-    TYPE_STRING,
-    BaseQueryRunner,
-    register,
+    TYPE_FLOAT,
+    TYPE_BOOLEAN,
 )
 from redash.utils import json_dumps, json_loads
 
+
 try:
+    from azure.kusto.data.request import KustoClient, KustoConnectionStringBuilder, ClientRequestProperties
     from azure.kusto.data.exceptions import KustoServiceError
-    from azure.kusto.data.request import (
-        ClientRequestProperties,
-        KustoClient,
-        KustoConnectionStringBuilder,
-    )
 
     enabled = True
 except ImportError:
@@ -91,6 +87,7 @@ class AzureKusto(BaseQueryRunner):
         return "Azure Data Explorer (Kusto)"
 
     def run_query(self, query, user):
+
         kcsb = KustoConnectionStringBuilder.with_aad_application_key_authentication(
             connection_string=self.configuration["cluster"],
             aad_app_id=self.configuration["azure_ad_client_id"],
@@ -141,12 +138,14 @@ class AzureKusto(BaseQueryRunner):
         results, error = self.run_query(query, None)
 
         if error is not None:
-            self._handle_run_query_error(error)
+            raise Exception("Failed getting schema.")
 
         results = json_loads(results)
 
         schema_as_json = json_loads(results["rows"][0]["DatabaseSchema"])
-        tables_list = schema_as_json["Databases"][self.configuration["database"]]["Tables"].values()
+        tables_list = schema_as_json["Databases"][self.configuration["database"]][
+            "Tables"
+        ].values()
 
         schema = {}
 

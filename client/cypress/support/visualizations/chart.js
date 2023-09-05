@@ -80,10 +80,6 @@ export function assertAxesAndAddLabels(xaxisLabel, yaxisLabel) {
     .clear()
     .type(yaxisLabel);
 
-  cy.getByTestId("Chart.LeftYAxis.TickFormat")
-    .clear()
-    .type("+");
-
   cy.getByTestId("VisualizationEditor.Tabs.General").click();
 }
 

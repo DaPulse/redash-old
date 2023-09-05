@@ -1,11 +1,10 @@
-import datetime
-import logging
+from redash.query_runner import *
+from redash.utils import json_dumps, json_loads
 
 import jwt
+import datetime
 import requests
-
-from redash.query_runner import BaseSQLQueryRunner, register
-from redash.utils import json_dumps, json_loads
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +62,9 @@ class Uptycs(BaseSQLQueryRunner):
 
     def api_call(self, sql):
         # JWT encoded header
-        header = self.generate_header(self.configuration.get("key"), self.configuration.get("secret"))
+        header = self.generate_header(
+            self.configuration.get("key"), self.configuration.get("secret")
+        )
 
         # URL form using API key file based on GLOBAL
         url = "%s/public/api/customers/%s/query" % (
@@ -104,12 +105,16 @@ class Uptycs(BaseSQLQueryRunner):
         return json_data, error
 
     def get_schema(self, get_stats=False):
-        header = self.generate_header(self.configuration.get("key"), self.configuration.get("secret"))
+        header = self.generate_header(
+            self.configuration.get("key"), self.configuration.get("secret")
+        )
         url = "%s/public/api/customers/%s/schema/global" % (
             self.configuration.get("url"),
             self.configuration.get("customer_id"),
         )
-        response = requests.get(url, headers=header, verify=self.configuration.get("verify_ssl", True))
+        response = requests.get(
+            url, headers=header, verify=self.configuration.get("verify_ssl", True)
+        )
         redash_json = []
         schema = json_loads(response.content)
         for each_def in schema["tables"]:

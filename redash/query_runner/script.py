@@ -1,7 +1,8 @@
 import os
 import subprocess
+import sys
 
-from redash.query_runner import BaseQueryRunner, register
+from redash.query_runner import *
 
 
 def query_to_script_path(path, query):
@@ -61,7 +62,9 @@ class Script(BaseQueryRunner):
 
         # Poor man's protection against running scripts from outside the scripts directory
         if self.configuration["path"].find("../") > -1:
-            raise ValueError("Scripts can only be run from the configured scripts directory")
+            raise ValueError(
+                "Scripts can only be run from the configured scripts directory"
+            )
 
     def test_connection(self):
         pass

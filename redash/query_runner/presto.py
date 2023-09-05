@@ -1,17 +1,8 @@
-import logging
-
-from redash.query_runner import (
-    TYPE_BOOLEAN,
-    TYPE_DATE,
-    TYPE_FLOAT,
-    TYPE_INTEGER,
-    TYPE_STRING,
-    BaseQueryRunner,
-    InterruptException,
-    JobTimeoutException,
-    register,
-)
+from collections import defaultdict
+from redash.query_runner import *
 from redash.utils import json_dumps, json_loads
+
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +78,7 @@ class Presto(BaseQueryRunner):
         results, error = self.run_query(query, None)
 
         if error is not None:
-            self._handle_run_query_error(error)
+            raise Exception("Failed getting schema.")
 
         results = json_loads(results)
 
@@ -116,9 +107,14 @@ class Presto(BaseQueryRunner):
 
         try:
             cursor.execute(query)
-            column_tuples = [(i[0], PRESTO_TYPES_MAPPING.get(i[1], None)) for i in cursor.description]
+            column_tuples = [
+                (i[0], PRESTO_TYPES_MAPPING.get(i[1], None)) for i in cursor.description
+            ]
             columns = self.fetch_columns(column_tuples)
-            rows = [dict(zip(([column["name"] for column in columns]), r)) for i, r in enumerate(cursor.fetchall())]
+            rows = [
+                dict(zip(([column["name"] for column in columns]), r))
+                for i, r in enumerate(cursor.fetchall())
+            ]
             data = {"columns": columns, "rows": rows}
             json_data = json_dumps(data)
             error = None
@@ -126,7 +122,9 @@ class Presto(BaseQueryRunner):
             json_data = None
             default_message = "Unspecified DatabaseError: {0}".format(str(db))
             if isinstance(db.args[0], dict):
-                message = db.args[0].get("failureInfo", {"message", None}).get("message")
+                message = db.args[0].get("failureInfo", {"message", None}).get(
+                    "message"
+                )
             else:
                 message = None
             error = default_message if message is None else message

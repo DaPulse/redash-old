@@ -13,7 +13,7 @@ try {
   cypressConfigBaseUrl = cypressConfig.baseUrl;
 } catch (e) {}
 
-const baseUrl = process.env.CYPRESS_baseUrl || cypressConfigBaseUrl || "http://localhost:5001";
+const baseUrl = process.env.CYPRESS_baseUrl || cypressConfigBaseUrl || "http://localhost:5000";
 
 function seedDatabase(seedValues) {
   get(baseUrl + "/login", (_, { headers }) => {
@@ -63,10 +63,10 @@ function runCypressCI() {
     PERCY_TOKEN_ENCODED,
     CYPRESS_PROJECT_ID_ENCODED,
     CYPRESS_RECORD_KEY_ENCODED,
-    GITHUB_REPOSITORY,
+    CIRCLE_REPOSITORY_URL,
   } = process.env;
 
-  if (GITHUB_REPOSITORY === "getredash/redash") {
+  if (CIRCLE_REPOSITORY_URL && CIRCLE_REPOSITORY_URL.includes("getredash/redash")) {
     if (PERCY_TOKEN_ENCODED) {
       process.env.PERCY_TOKEN = atob(`${PERCY_TOKEN_ENCODED}`);
     }

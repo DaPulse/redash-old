@@ -1,5 +1,4 @@
 from unittest import TestCase
-
 from redash.query_runner.pg import build_schema
 
 

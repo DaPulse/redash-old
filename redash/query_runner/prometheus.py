@@ -1,16 +1,9 @@
+import requests
 import time
 from datetime import datetime
-from urllib.parse import parse_qs
-
-import requests
 from dateutil import parser
-
-from redash.query_runner import (
-    TYPE_DATETIME,
-    TYPE_STRING,
-    BaseQueryRunner,
-    register,
-)
+from urllib.parse import parse_qs
+from redash.query_runner import BaseQueryRunner, register, TYPE_DATETIME, TYPE_STRING
 from redash.utils import json_dumps
 
 
@@ -125,13 +118,17 @@ class Prometheus(BaseQueryRunner):
             error = None
             query = query.strip()
             # for backward compatibility
-            query = "query={}".format(query) if not query.startswith("query=") else query
+            query = (
+                "query={}".format(query) if not query.startswith("query=") else query
+            )
 
             payload = parse_qs(query)
             query_type = "query_range" if "step" in payload.keys() else "query"
 
             # for the range of until now
-            if query_type == "query_range" and ("end" not in payload.keys() or "now" in payload["end"]):
+            if query_type == "query_range" and (
+                "end" not in payload.keys() or "now" in payload["end"]
+            ):
                 date_now = datetime.now()
                 payload.update({"end": [date_now]})
 

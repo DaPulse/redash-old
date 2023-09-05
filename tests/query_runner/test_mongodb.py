@@ -1,15 +1,15 @@
 import datetime
 from unittest import TestCase
+from mock import patch, call
 
-from freezegun import freeze_time
-from mock import patch
 from pytz import utc
+from freezegun import freeze_time
 
 from redash.query_runner.mongodb import (
     MongoDB,
-    _get_column_by_name,
     parse_query_json,
     parse_results,
+    _get_column_by_name,
 )
 from redash.utils import json_dumps, parse_human_time
 
@@ -21,7 +21,7 @@ class TestUserPassOverride(TestCase):
             "connectionString": "mongodb://localhost:27017/test",
             "username": "test_user",
             "password": "test_pass",
-            "dbName": "test",
+            "dbName": "test"
         }
         mongo_qr = MongoDB(config)
         _ = mongo_qr._get_db()
@@ -30,7 +30,10 @@ class TestUserPassOverride(TestCase):
         self.assertIn("password", mongo_client.call_args.kwargs)
 
     def test_username_password_absent_does_not_pass_args(self, mongo_client):
-        config = {"connectionString": "mongodb://user:pass@localhost:27017/test", "dbName": "test"}
+        config = {
+            "connectionString": "mongodb://user:pass@localhost:27017/test",
+            "dbName": "test"
+        }
         mongo_qr = MongoDB(config)
         _ = mongo_qr._get_db()
 
@@ -55,7 +58,9 @@ class TestParseQueryJson(TestCase):
 
         query_data = parse_query_json(json_dumps(query))
 
-        self.assertEqual(query_data["testIsoDate"], datetime.datetime(2014, 10, 3, 0, 0))
+        self.assertEqual(
+            query_data["testIsoDate"], datetime.datetime(2014, 10, 3, 0, 0)
+        )
 
     def test_parses_isodate_in_nested_fields(self):
         query = {
@@ -67,8 +72,12 @@ class TestParseQueryJson(TestCase):
 
         query_data = parse_query_json(json_dumps(query))
 
-        self.assertEqual(query_data["testIsoDate"], datetime.datetime(2014, 10, 3, 0, 0))
-        self.assertEqual(query_data["test_dict"]["b"]["date"], datetime.datetime(2014, 10, 4, 0, 0))
+        self.assertEqual(
+            query_data["testIsoDate"], datetime.datetime(2014, 10, 3, 0, 0)
+        )
+        self.assertEqual(
+            query_data["test_dict"]["b"]["date"], datetime.datetime(2014, 10, 4, 0, 0)
+        )
 
     def test_handles_nested_fields(self):
         # https://github.com/getredash/redash/issues/597
@@ -147,7 +156,9 @@ class TestMongoResults(TestCase):
 
         rows, columns = parse_results(raw_results)
 
-        self.assertDictEqual(rows[0], {"column": 1, "column2": "test", "nested.a": 1, "nested.b": "str"})
+        self.assertDictEqual(
+            rows[0], {"column": 1, "column2": "test", "nested.a": 1, "nested.b": "str"}
+        )
         self.assertDictEqual(
             rows[1],
             {

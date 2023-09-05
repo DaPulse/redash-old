@@ -1,7 +1,6 @@
 from sys import exit
 
 import click
-from click.types import convert_type
 from flask.cli import AppGroup
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -34,10 +33,14 @@ def list_command(organization=None):
         if i > 0:
             print("-" * 20)
 
-        print("Id: {}\nName: {}\nType: {}\nOptions: {}".format(ds.id, ds.name, ds.type, ds.options.to_json()))
+        print(
+            "Id: {}\nName: {}\nType: {}\nOptions: {}".format(
+                ds.id, ds.name, ds.type, ds.options.to_json()
+            )
+        )
 
 
-@manager.command(name="list_types")
+@manager.command()
 def list_types():
     print("Enabled Query Runners:")
     types = sorted(query_runners.keys())
@@ -72,7 +75,9 @@ def test(name, organization="default"):
         data_source = models.DataSource.query.filter(
             models.DataSource.name == name, models.DataSource.org == org
         ).one()
-        print("Testing connection to data source: {} (id={})".format(name, data_source.id))
+        print(
+            "Testing connection to data source: {} (id={})".format(name, data_source.id)
+        )
         try:
             data_source.query_runner.test_connection()
         except Exception as e:
@@ -134,19 +139,11 @@ def new(name=None, type=None, options=None, organization="default"):
             else:
                 prompt = "{} (optional)".format(prompt)
 
-            _type = types[prop["type"]]
-
-            def value_proc(value):
-                if value == default_value:
-                    return default_value
-                return convert_type(_type, default_value)(value)
-
             value = click.prompt(
                 prompt,
                 default=default_value,
-                type=_type,
+                type=types[prop["type"]],
                 show_default=False,
-                value_proc=value_proc,
             )
             if value != default_value:
                 options_obj[k] = value
@@ -157,9 +154,13 @@ def new(name=None, type=None, options=None, organization="default"):
 
     if not options.is_valid():
         print("Error: invalid configuration.")
-        exit(1)
+        exit()
 
-    print("Creating {} data source ({}) with options:\n{}".format(type, name, options.to_json()))
+    print(
+        "Creating {} data source ({}) with options:\n{}".format(
+            type, name, options.to_json()
+        )
+    )
 
     data_source = models.DataSource.create_with_group(
         name=name,

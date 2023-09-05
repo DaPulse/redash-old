@@ -5,18 +5,17 @@ try:
 except ImportError:
     enabled = False
 
-
+from redash.query_runner import BaseQueryRunner, register
 from redash.query_runner import (
-    TYPE_BOOLEAN,
+    TYPE_STRING,
     TYPE_DATE,
     TYPE_DATETIME,
-    TYPE_FLOAT,
     TYPE_INTEGER,
-    TYPE_STRING,
-    BaseSQLQueryRunner,
-    register,
+    TYPE_FLOAT,
+    TYPE_BOOLEAN,
 )
-from redash.utils import json_dumps
+from redash.utils import json_dumps, json_loads
+import re
 
 TYPES_MAP = {
     0: TYPE_INTEGER,
@@ -32,7 +31,35 @@ TYPES_MAP = {
 }
 
 
-class Snowflake(BaseSQLQueryRunner):
+def _query_restrictions(query):
+    if query.find("/*laspha*/") > 0:
+        return True, None
+    query_without_comments = ''
+    for line in query.split('\n'):
+        line = line.strip()
+        if line.find('--') != -1:
+            line = line[:line.find('--')]
+        query_without_comments += ' ' + line  # creates one line query
+    query = ' ' + query_without_comments.lower() + ' '
+    # replace multiple spaces with one space
+    query = re.sub(' +', ' ', query)
+    # remove /* */ comments
+    query = re.sub('\/\*.*\*\/', '', query)
+    # get rid of prefix like bigbrain. or final.
+    query = re.sub('bigbrain.', '', re.sub('final.', '', re.sub('raw.', '', query)))
+    occurrences = re.findall(" from events ", query) + re.findall(" join events ", query)
+    # print("num of occurrences : ", len(occurrences))
+    if len(occurrences) > 1:
+        return False, f'Querying events table multiple times is forbidden.The query contains {len(occurrences)} occurrences of the table events. '
+
+    if occurrences:
+        if query.find("created_at") + query.find("ingestion_time") == -2:
+            return False, 'Querying events table should always be with time constraint (by created_at for ' \
+                          'FINAL.events & ingestion_time for RAW.events) '
+    return True, None
+
+
+class Snowflake(BaseQueryRunner):
     noop_query = "SELECT 1"
 
     @classmethod
@@ -114,9 +141,14 @@ class Snowflake(BaseSQLQueryRunner):
 
     def _parse_results(self, cursor):
         columns = self.fetch_columns(
-            [(self._column_name(i[0]), self.determine_type(i[1], i[5])) for i in cursor.description]
+            [
+                (self._column_name(i[0]), self.determine_type(i[1], i[5]))
+                for i in cursor.description
+            ]
         )
-        rows = [dict(zip((column["name"] for column in columns), row)) for row in cursor]
+        rows = [
+            dict(zip((column["name"] for column in columns), row)) for row in cursor
+        ]
 
         data = {"columns": columns, "rows": rows}
         return data
@@ -124,6 +156,10 @@ class Snowflake(BaseSQLQueryRunner):
     def run_query(self, query, user, query_id=None):
         connection = self._get_connection()
         cursor = connection.cursor()
+        passed, error = _query_restrictions(query)
+
+        if not passed:
+            return None, error
 
         try:
             cursor.execute("USE WAREHOUSE {}".format(self.configuration["warehouse"]))
@@ -131,7 +167,7 @@ class Snowflake(BaseSQLQueryRunner):
 
             user_id = "redash" if user is None else user.email
             query_id = str(query_id) if query_id else ''
-            query += "-- REDASH USER: " + user_id + " QUERY ID: " + query_id
+            query += '-- {"REDASH USER": "' + user_id + '"  , "QUERY ID": "' + query_id + '"}'
 
             cursor.execute(query)
 
@@ -173,7 +209,7 @@ class Snowflake(BaseSQLQueryRunner):
         results, error = self._run_query_without_warehouse(query)
 
         if error is not None:
-            self._handle_run_query_error(error)
+            raise Exception("Failed getting schema.")
 
         schema = {}
         for row in results["rows"]:

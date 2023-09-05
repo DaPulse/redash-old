@@ -1,28 +1,25 @@
-import logging
 import re
+import logging
 from collections import OrderedDict
-
+from redash.query_runner import BaseQueryRunner, register
 from redash.query_runner import (
-    TYPE_BOOLEAN,
+    TYPE_STRING,
     TYPE_DATE,
     TYPE_DATETIME,
-    TYPE_FLOAT,
     TYPE_INTEGER,
-    TYPE_STRING,
-    BaseQueryRunner,
-    register,
+    TYPE_FLOAT,
+    TYPE_BOOLEAN,
 )
 from redash.utils import json_dumps
 
 logger = logging.getLogger(__name__)
 
 try:
-    from simple_salesforce import Salesforce as SimpleSalesforce
-    from simple_salesforce import SalesforceError
+    from simple_salesforce import Salesforce as SimpleSalesforce, SalesforceError
     from simple_salesforce.api import DEFAULT_API_VERSION
 
     enabled = True
-except ImportError:
+except ImportError as e:
     enabled = False
 
 # See https://developer.salesforce.com/docs/atlas.en-us.api.meta/api/field_types.htm
@@ -81,7 +78,7 @@ class Salesforce(BaseQueryRunner):
                     "default": DEFAULT_API_VERSION,
                 },
             },
-            "required": ["username", "password"],
+            "required": ["username", "password", "token"],
             "secret": ["password", "token"],
         }
 

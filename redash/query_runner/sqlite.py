@@ -1,11 +1,7 @@
 import logging
 import sqlite3
 
-from redash.query_runner import (
-    BaseSQLQueryRunner,
-    JobTimeoutException,
-    register,
-)
+from redash.query_runner import BaseSQLQueryRunner, register, JobTimeoutException
 from redash.utils import json_dumps, json_loads
 
 logger = logging.getLogger(__name__)
@@ -33,7 +29,7 @@ class Sqlite(BaseSQLQueryRunner):
 
     def _get_tables(self, schema):
         query_table = "select tbl_name from sqlite_master where type='table'"
-        query_columns = 'PRAGMA table_info("%s")'
+        query_columns = "PRAGMA table_info(\"%s\")"
 
         results, error = self.run_query(query_table, None)
 
@@ -47,7 +43,7 @@ class Sqlite(BaseSQLQueryRunner):
             schema[table_name] = {"name": table_name, "columns": []}
             results_table, error = self.run_query(query_columns % (table_name,), None)
             if error is not None:
-                self._handle_run_query_error(error)
+                raise Exception("Failed getting schema.")
 
             results_table = json_loads(results_table)
             for row_column in results_table["rows"]:
@@ -65,7 +61,10 @@ class Sqlite(BaseSQLQueryRunner):
 
             if cursor.description is not None:
                 columns = self.fetch_columns([(i[0], None) for i in cursor.description])
-                rows = [dict(zip((column["name"] for column in columns), row)) for row in cursor]
+                rows = [
+                    dict(zip((column["name"] for column in columns), row))
+                    for row in cursor
+                ]
 
                 data = {"columns": columns, "rows": rows}
                 error = None

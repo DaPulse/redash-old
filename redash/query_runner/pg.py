@@ -1,6 +1,7 @@
-import logging
 import os
+import logging
 import select
+from contextlib import contextmanager
 from base64 import b64decode
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
@@ -8,18 +9,7 @@ from uuid import uuid4
 import psycopg2
 from psycopg2.extras import Range
 
-from redash.query_runner import (
-    TYPE_BOOLEAN,
-    TYPE_DATE,
-    TYPE_DATETIME,
-    TYPE_FLOAT,
-    TYPE_INTEGER,
-    TYPE_STRING,
-    BaseSQLQueryRunner,
-    InterruptException,
-    JobTimeoutException,
-    register,
-)
+from redash.query_runner import *
 from redash.utils import JSONEncoder, json_dumps, json_loads
 
 logger = logging.getLogger(__name__)
@@ -40,19 +30,13 @@ types_map = {
     701: TYPE_FLOAT,
     16: TYPE_BOOLEAN,
     1082: TYPE_DATE,
-    1182: TYPE_DATE,
     1114: TYPE_DATETIME,
     1184: TYPE_DATETIME,
-    1115: TYPE_DATETIME,
-    1185: TYPE_DATETIME,
     1014: TYPE_STRING,
     1015: TYPE_STRING,
     1008: TYPE_STRING,
     1009: TYPE_STRING,
     2951: TYPE_STRING,
-    1043: TYPE_STRING,
-    1002: TYPE_STRING,
-    1003: TYPE_STRING,
 }
 
 
@@ -202,7 +186,7 @@ class PostgreSQL(BaseSQLQueryRunner):
         results, error = self.run_query(query, None)
 
         if error is not None:
-            self._handle_run_query_error(error)
+            raise Exception("Failed getting schema.")
 
         results = json_loads(results)
 
@@ -236,7 +220,7 @@ class PostgreSQL(BaseSQLQueryRunner):
         ON a.attrelid = c.oid
         AND a.attnum > 0
         AND NOT a.attisdropped
-        WHERE c.relkind IN ('m', 'f', 'p') AND has_table_privilege(s.nspname || '.' || c.relname, 'select')
+        WHERE c.relkind IN ('m', 'f', 'p')
 
         UNION
 
@@ -277,8 +261,13 @@ class PostgreSQL(BaseSQLQueryRunner):
             _wait(connection)
 
             if cursor.description is not None:
-                columns = self.fetch_columns([(i[0], types_map.get(i[1], None)) for i in cursor.description])
-                rows = [dict(zip((column["name"] for column in columns), row)) for row in cursor]
+                columns = self.fetch_columns(
+                    [(i[0], types_map.get(i[1], None)) for i in cursor.description]
+                )
+                rows = [
+                    dict(zip((column["name"] for column in columns), row))
+                    for row in cursor
+                ]
 
                 data = {"columns": columns, "rows": rows}
                 error = None
@@ -286,7 +275,7 @@ class PostgreSQL(BaseSQLQueryRunner):
             else:
                 error = "Query completed but it returned no data."
                 json_data = None
-        except (select.error, OSError):
+        except (select.error, OSError) as e:
             error = "Query interrupted. Please retry."
             json_data = None
         except psycopg2.DatabaseError as e:
@@ -314,7 +303,9 @@ class Redshift(PostgreSQL):
     def _get_connection(self):
         self.ssl_config = {}
 
-        sslrootcert_path = os.path.join(os.path.dirname(__file__), "./files/redshift-ca-bundle.crt")
+        sslrootcert_path = os.path.join(
+            os.path.dirname(__file__), "./files/redshift-ca-bundle.crt"
+        )
 
         connection = psycopg2.connect(
             user=self.configuration.get("user"),
@@ -428,11 +419,15 @@ class RedshiftIAM(Redshift):
 
     def _login_method_selection(self):
         if self.configuration.get("rolename"):
-            if not self.configuration.get("aws_access_key_id") or not self.configuration.get("aws_secret_access_key"):
+            if not self.configuration.get(
+                "aws_access_key_id"
+            ) or not self.configuration.get("aws_secret_access_key"):
                 return "ASSUME_ROLE_NO_KEYS"
             else:
                 return "ASSUME_ROLE_KEYS"
-        elif self.configuration.get("aws_access_key_id") and self.configuration.get("aws_secret_access_key"):
+        elif self.configuration.get("aws_access_key_id") and self.configuration.get(
+            "aws_secret_access_key"
+        ):
             return "KEYS"
         elif not self.configuration.get("password"):
             return "ROLE"
@@ -485,9 +480,10 @@ class RedshiftIAM(Redshift):
         }
 
     def _get_connection(self):
-        self.ssl_config = {}
 
-        sslrootcert_path = os.path.join(os.path.dirname(__file__), "./files/redshift-ca-bundle.crt")
+        sslrootcert_path = os.path.join(
+            os.path.dirname(__file__), "./files/redshift-ca-bundle.crt"
+        )
 
         login_method = self._login_method_selection()
 
@@ -499,17 +495,23 @@ class RedshiftIAM(Redshift):
                 aws_secret_access_key=self.configuration.get("aws_secret_access_key"),
             )
         elif login_method == "ROLE":
-            client = boto3.client("redshift", region_name=self.configuration.get("aws_region"))
+            client = boto3.client(
+                "redshift", region_name=self.configuration.get("aws_region")
+            )
         else:
             if login_method == "ASSUME_ROLE_KEYS":
                 assume_client = client = boto3.client(
                     "sts",
                     region_name=self.configuration.get("aws_region"),
                     aws_access_key_id=self.configuration.get("aws_access_key_id"),
-                    aws_secret_access_key=self.configuration.get("aws_secret_access_key"),
+                    aws_secret_access_key=self.configuration.get(
+                        "aws_secret_access_key"
+                    ),
                 )
             else:
-                assume_client = client = boto3.client("sts", region_name=self.configuration.get("aws_region"))
+                assume_client = client = boto3.client(
+                    "sts", region_name=self.configuration.get("aws_region")
+                )
             role_session = f"redash_{uuid4().hex}"
             session_keys = assume_client.assume_role(
                 RoleArn=self.configuration.get("rolename"), RoleSessionName=role_session

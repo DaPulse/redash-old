@@ -1,12 +1,15 @@
-from mock import call, patch
+from mock import patch, call
 from rq import Connection
 from rq.job import JobStatus
+from redash.tasks import Worker
 
-from redash import rq_redis_connection
-from redash.tasks import Queue, Worker
-from redash.tasks.queries.execution import enqueue_query
-from redash.worker import default_queues, job
 from tests import BaseTestCase
+from redash import rq_redis_connection
+from redash.tasks.worker import Queue
+from redash.tasks.queries.execution import (
+    enqueue_query,
+)
+from redash.worker import job, default_queues
 
 
 @patch("statsd.StatsClient.incr")

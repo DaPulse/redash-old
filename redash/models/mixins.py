@@ -1,6 +1,6 @@
 from sqlalchemy.event import listens_for
 
-from .base import Column, db
+from .base import db, Column
 
 
 class TimestampMixin(object):

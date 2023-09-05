@@ -1,12 +1,6 @@
 import logging
 
-from redash.query_runner import (
-    TYPE_BOOLEAN,
-    TYPE_FLOAT,
-    TYPE_STRING,
-    BaseQueryRunner,
-    register,
-)
+from redash.query_runner import *
 from redash.utils import json_dumps
 
 logger = logging.getLogger(__name__)
@@ -55,7 +49,7 @@ class Arango(BaseQueryRunner):
     @classmethod
     def enabled(cls):
         try:
-            import arango  # noqa: F401
+            import arango
         except ImportError:
             return False
 
@@ -66,15 +60,18 @@ class Arango(BaseQueryRunner):
         return "arangodb"
 
     def run_query(self, query, user):
-        client = ArangoClient(hosts="{}:{}".format(self.configuration["host"], self.configuration.get("port", 8529)))
-        db = client.db(
-            self.configuration["dbname"], username=self.configuration["user"], password=self.configuration["password"]
-        )
+        client = ArangoClient(hosts='{}:{}'.format(self.configuration["host"],
+                                                   self.configuration.get("port", 8529)))
+        db = client.db(self.configuration["dbname"],
+                       username=self.configuration["user"],
+                       password=self.configuration["password"])
 
         try:
             cursor = db.aql.execute(query, max_runtime=self.configuration.get("timeout", 0.0))
             result = [i for i in cursor]
-            column_tuples = [(i, TYPE_STRING) for i in result[0].keys()]
+            column_tuples = [
+                (i, TYPE_STRING) for i in result[0].keys()
+            ]
             columns = self.fetch_columns(column_tuples)
             data = {
                 "columns": columns,

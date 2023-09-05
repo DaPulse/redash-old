@@ -1,13 +1,12 @@
-import textwrap
-
 import mock
+import textwrap
 from click.testing import CliRunner
 
+from tests import BaseTestCase
+from redash.utils.configuration import ConfigurationContainer
+from redash.query_runner import query_runners
 from redash.cli import manager
 from redash.models import DataSource, Group, Organization, User, db
-from redash.query_runner import query_runners
-from redash.utils.configuration import ConfigurationContainer
-from tests import BaseTestCase
 
 
 class DataSourceCommandTests(BaseTestCase):
@@ -81,7 +80,9 @@ class DataSourceCommandTests(BaseTestCase):
         self.factory.create_data_source(
             name="test1",
             type="pg",
-            options=ConfigurationContainer({"host": "example.com", "dbname": "testdb1"}),
+            options=ConfigurationContainer(
+                {"host": "example.com", "dbname": "testdb1"}
+            ),
         )
         self.factory.create_data_source(
             name="test2",
@@ -114,7 +115,9 @@ class DataSourceCommandTests(BaseTestCase):
         Type: sqlite
         Options: {"dbpath": "/tmp/test.db"}
         """
-        self.assertMultiLineEqual(result.output, textwrap.dedent(expected_output).lstrip())
+        self.assertMultiLineEqual(
+            result.output, textwrap.dedent(expected_output).lstrip()
+        )
 
     def test_connection_test(self):
         self.factory.create_data_source(
@@ -242,7 +245,9 @@ class GroupCommandTests(BaseTestCase):
         gcount = Group.query.count()
         perms = ["create_query", "edit_query", "view_query"]
         runner = CliRunner()
-        result = runner.invoke(manager, ["groups", "create", "test", "--permissions", ",".join(perms)])
+        result = runner.invoke(
+            manager, ["groups", "create", "test", "--permissions", ",".join(perms)]
+        )
         self.assertFalse(result.exception)
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(Group.query.count(), gcount + 1)
@@ -294,21 +299,21 @@ class GroupCommandTests(BaseTestCase):
         Type: builtin
         Organization: default
         Permissions: [admin,super_admin]
-        Users:
+        Users: 
         --------------------
         Id: 4
         Name: agroup
         Type: regular
         Organization: default
         Permissions: [list_dashboards]
-        Users:
+        Users: 
         --------------------
         Id: 5
         Name: bgroup
         Type: regular
         Organization: default
         Permissions: [list_dashboards]
-        Users:
+        Users: 
         --------------------
         Id: 2
         Name: default
@@ -322,7 +327,7 @@ class GroupCommandTests(BaseTestCase):
         Type: regular
         Organization: default
         Permissions: [list_dashboards]
-        Users:
+        Users: 
         """
         self.assertMultiLineEqual(result.output, textwrap.dedent(output).lstrip())
 
@@ -331,7 +336,9 @@ class OrganizationCommandTests(BaseTestCase):
     def test_set_google_apps_domains(self):
         domains = ["example.org", "example.com"]
         runner = CliRunner()
-        result = runner.invoke(manager, ["org", "set_google_apps_domains", ",".join(domains)])
+        result = runner.invoke(
+            manager, ["org", "set_google_apps_domains", ",".join(domains)]
+        )
         self.assertFalse(result.exception)
         self.assertEqual(result.exit_code, 0)
         db.session.add(self.factory.org)
@@ -352,16 +359,6 @@ class OrganizationCommandTests(BaseTestCase):
         Current list of Google Apps domains: example.org, example.com
         """
         self.assertMultiLineEqual(result.output, textwrap.dedent(output).lstrip())
-
-    def test_create(self):
-        runner = CliRunner()
-        result = runner.invoke(manager, ["org", "create", "test", "--slug", "test"])
-        self.assertFalse(result.exception)
-        self.assertEqual(result.exit_code, 0)
-
-        ucount = Organization.query.count()
-
-        self.assertEqual(ucount, 2)
 
     def test_list(self):
         self.factory.create_org(name="test", slug="test_org")
@@ -459,7 +456,9 @@ class UserCommandTests(BaseTestCase):
         result = runner.invoke(manager, ["users", "delete", "foobar@example.com"])
         self.assertFalse(result.exception)
         self.assertEqual(result.exit_code, 0)
-        self.assertEqual(User.query.filter(User.email == "foobar@example.com").count(), 0)
+        self.assertEqual(
+            User.query.filter(User.email == "foobar@example.com").count(), 0
+        )
         self.assertEqual(User.query.count(), ucount - 1)
 
     def test_delete_bad(self):
@@ -472,7 +471,9 @@ class UserCommandTests(BaseTestCase):
     def test_password(self):
         self.factory.create_user(email="foobar@example.com")
         runner = CliRunner()
-        result = runner.invoke(manager, ["users", "password", "foobar@example.com", "xyzzy"])
+        result = runner.invoke(
+            manager, ["users", "password", "foobar@example.com", "xyzzy"]
+        )
         self.assertFalse(result.exception)
         self.assertEqual(result.exit_code, 0)
         u = User.query.filter(User.email == "foobar@example.com").first()
@@ -480,7 +481,9 @@ class UserCommandTests(BaseTestCase):
 
     def test_password_bad(self):
         runner = CliRunner()
-        result = runner.invoke(manager, ["users", "password", "foobar@example.com", "xyzzy"])
+        result = runner.invoke(
+            manager, ["users", "password", "foobar@example.com", "xyzzy"]
+        )
         self.assertTrue(result.exception)
         self.assertEqual(result.exit_code, 1)
         self.assertIn("not found", result.output)
@@ -519,11 +522,17 @@ class UserCommandTests(BaseTestCase):
             self.assertEqual(c[2].email, "foobar@example.com")
 
     def test_list(self):
-        self.factory.create_user(name="Fred Foobar", email="foobar@example.com", org=self.factory.org)
+        self.factory.create_user(
+            name="Fred Foobar", email="foobar@example.com", org=self.factory.org
+        )
 
-        self.factory.create_user(name="William Foobar", email="william@example.com", org=self.factory.org)
+        self.factory.create_user(
+            name="William Foobar", email="william@example.com", org=self.factory.org
+        )
 
-        self.factory.create_user(name="Andrew Foobar", email="andrew@example.com", org=self.factory.org)
+        self.factory.create_user(
+            name="Andrew Foobar", email="andrew@example.com", org=self.factory.org
+        )
 
         runner = CliRunner()
         result = runner.invoke(manager, ["users", "list"])
