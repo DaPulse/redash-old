@@ -177,7 +177,10 @@ class QueryExecutor(object):
         annotated_query = self._annotate_query(query_runner)
 
         try:
-            data, error = query_runner.run_query(annotated_query, self.user, self.query_id)
+            if self.data_source.type.lower() == "snowflake":
+                data, error = query_runner.run_query(annotated_query, self.user, self.query_id)
+            else:
+                data, error = query_runner.run_query(annotated_query, self.user)
         except Exception as e:
             if isinstance(e, JobTimeoutException):
                 error = TIMEOUT_MESSAGE
