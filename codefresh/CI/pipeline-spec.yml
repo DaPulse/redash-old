@@ -4,6 +4,9 @@ kind: pipeline
 metadata:
   name: redash/CI
   project: redash
+  labels:
+    tags:
+      - bi-engineering
 spec:
   triggers:
     - name: staging
@@ -71,6 +74,9 @@ spec:
       context: Dapulse-OAuth2
       contexts:
         - sandbox
+      variables:
+        - key: TRIGGER_TYPE
+          value: prod
 
   stages: []
   contexts: []
